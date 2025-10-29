@@ -1,0 +1,224 @@
+import tkinter as tk
+from tkinter import messagebox
+import plotly.express as px
+
+# ===============================
+# EMISSION FACTORS
+# ===============================
+'''
+factors = {
+    "Cars": 0.000192,
+    "Trucks": 0.0009,
+    "Buses": 0.000822,
+    "Forklifts": 0.0018,
+    "Cargo Planes": 2.5,
+    "Office Lighting": 0.0004,
+    "Heating": 0.00025,
+    "Cooling": 0.0004,
+    "Computing": 0.00035,
+    "Subcontractors": 1.0
+}
+'''
+# ===============================
+# CALCULATION LOGIC
+# ===============================
+def calculate_emissions():
+    try:
+        # Get all inputs
+        inputs = {name: float(entry_boxes[name].get()) for name in entry_boxes}
+        car_ev = float(ev_share_entry.get()) / 100       # EV Share %
+        car_km_reduction = float(km_reduce_entry.get()) / 100  # KM Reduction %
+        plane_factor = float(plane_factor_entry.get()) / 100   # Load Factor %
+
+        # ===============================
+        # Emission Factors (from image)
+        # ===============================
+        ef = {
+            "Cars": 0.18,             # kg/km
+            "Trucks": 0.90,           # kg/km
+            "Buses": 1.10,            # kg/km
+            "Forklifts": 4.0,         # kg/hour
+            "Cargo Planes": 9000.0,   # kg/hour
+            "Office Lighting": 0.42,  # kg/kWh
+            "Heating": 0.20,          # kg/kWh-th
+            "Cooling": 0.42,          # kg/kWh
+            "Computing": 0.42,        # kg/kWh
+            "Subcontractors": 1.0     # tons (direct)
+        }
+
+        # ===============================
+        # Baseline Calculation
+        # (Emissions in tons CO₂e)
+        # ===============================
+        baseline = {}
+        baseline["Cars"] = (inputs["Cars"] * ef["Cars"]) / 1000
+        baseline["Trucks"] = (inputs["Trucks"] * ef["Trucks"]) / 1000
+        baseline["Buses"] = (inputs["Buses"] * ef["Buses"]) / 1000
+        baseline["Forklifts"] = (inputs["Forklifts"] * ef["Forklifts"]) / 1000
+        baseline["Cargo Planes"] = (inputs["Cargo Planes"] * ef["Cargo Planes"]) / 1000
+        baseline["Office Lighting"] = (inputs["Office Lighting"] * ef["Office Lighting"]) / 1000
+        baseline["Heating"] = (inputs["Heating"] * ef["Heating"]) / 1000
+        baseline["Cooling"] = (inputs["Cooling"] * ef["Cooling"]) / 1000
+        baseline["Computing"] = (inputs["Computing"] * ef["Computing"]) / 1000
+        baseline["Subcontractors"] = inputs["Subcontractors"]  # already tons
+
+        # ===============================
+        # Optimized Calculation (with EV & KM reduction)
+        # ===============================
+        optimized = baseline.copy()
+
+        # Cars formula:
+        # ((Cars_km × 0.18) × (1 - 0.7×EV%) × (1 - KMRed%)) / 1000
+        optimized["Cars"] = ((inputs["Cars"] * ef["Cars"]) *
+                             (1 - 0.7 * car_ev) *
+                             (1 - car_km_reduction)) / 1000
+
+        # Cargo Planes formula:
+        # ((Planes_hr × 9000) × (LoadFactor/100)) / 1000
+        optimized["Cargo Planes"] = ((inputs["Cargo Planes"] * ef["Cargo Planes"]) *
+                                     (plane_factor)) / 1000
+
+        # Others remain same as baseline
+        for cat in baseline:
+            if cat not in ["Cars", "Cargo Planes"]:
+                optimized[cat] = baseline[cat]
+
+        # ===============================
+        # Totals
+        # ===============================
+        baseline_total = sum(baseline.values())
+        optimized_total = sum(optimized.values())
+
+        # ===============================
+        # Charts
+        # ===============================
+        fig = px.pie(
+            names=list(optimized.keys()),
+            values=list(optimized.values()),
+            title="Emission Share by Category (Optimized)",
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig.update_traces(textposition='inside', textinfo='percent+label', hole=0.4)
+        fig.update_layout(
+            paper_bgcolor="#12181a",
+            plot_bgcolor="#12181a",
+            font=dict(color="#ffffff"),
+            title_font=dict(color="#50e3c2", size=20)
+        )
+        fig.show()
+
+        bar_data = {
+            "Scenario": ["Baseline", "Optimized"],
+            "Emissions": [baseline_total, optimized_total]
+        }
+        fig_bar = px.bar(
+            bar_data,
+            x="Scenario",
+            y="Emissions",
+            title="Total Emissions (tons CO₂e)",
+            text="Emissions",
+            color="Scenario",
+            color_discrete_sequence=["#4a90e2", "#50e3c2"]
+        )
+        fig_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        fig_bar.update_layout(
+            paper_bgcolor="#12181a",
+            plot_bgcolor="#12181a",
+            font=dict(color="#ffffff"),
+            title_font=dict(color="#50e3c2", size=20)
+        )
+        fig_bar.show()
+
+    except ValueError:
+        messagebox.showerror("Error", "Please enter valid numbers for all fields.")
+# ===============================
+# UI DESIGN
+# ===============================
+root = tk.Tk()
+root.title("Green Logistics Tracker")
+root.geometry("600x800")
+root.config(bg="#0a0e10")  # dark background
+
+# Title
+tk.Label(
+    root,
+    text="🌿 Green Logistics Tracker",
+    font=("Arial Rounded MT Bold", 18, "bold"),
+    bg="#0a0e10",
+    fg="#50e3c2"
+).pack(pady=20)
+
+tk.Label(
+    root,
+    text="Enter your annual activity data below",
+    font=("Arial", 12),
+    bg="#0a0e10",
+    fg="#b0b0b0"
+).pack(pady=5)
+
+# Main frame (white box)
+main_frame = tk.Frame(root, bg="#111518", bd=2, relief="flat", highlightbackground="#50e3c2", highlightthickness=2)
+main_frame.pack(padx=20, pady=10, fill="both", expand=True)
+
+
+entry_boxes = {}
+
+categories = [
+    "Cars", "Trucks", "Buses", "Forklifts", "Cargo Planes",
+    "Office Lighting", "Heating", "Cooling", "Computing", "Subcontractors"
+]
+
+for name in categories:
+    frame = tk.Frame(main_frame, bg="#111518")
+    frame.pack(pady=5, padx=10, anchor="w")
+    tk.Label(frame, text=name + ": ", width=20, anchor="w", bg="#111518", fg="#e0e0e0").pack(side="left")
+    e = tk.Entry(frame, width=15, font=("Arial", 10), relief="flat", bg="#1b2529", fg="#ffffff", insertbackground="#ffffff")
+    e.pack(side="left", ipady=4)
+    entry_boxes[name] = e
+
+# Optimization header
+tk.Label(
+    main_frame,
+    text="\nOptimization Settings",
+    font=("Arial", 12, "bold"),
+    bg="#111518",
+    fg="#50e3c2"
+).pack(pady=10)
+
+# Optimization settings (aligned in one row)
+opt_frame = tk.Frame(main_frame, bg="#111518")
+opt_frame.pack(pady=5, padx=10, anchor="w")
+
+# EV share
+tk.Label(opt_frame, text="EV Share for Cars (%):", bg="#111518", fg="#e0e0e0").grid(row=0, column=0, sticky="w", padx=5)
+ev_share_entry = tk.Entry(opt_frame, width=8, bg="#1b2529", fg="#ffffff", relief="flat", insertbackground="#ffffff")
+ev_share_entry.insert(0, "50")
+ev_share_entry.grid(row=0, column=1, padx=5)
+
+# KM reduction
+tk.Label(opt_frame, text="KM Reduction for Cars (%):", bg="#111518", fg="#e0e0e0").grid(row=0, column=2, sticky="w", padx=5)
+km_reduce_entry = tk.Entry(opt_frame, width=8, bg="#1b2529", fg="#ffffff", relief="flat", insertbackground="#ffffff")
+km_reduce_entry.insert(0, "10")
+km_reduce_entry.grid(row=0, column=3, padx=5)
+
+# Plane load factor
+tk.Label(opt_frame, text="Plane Load Factor (% of baseline):", bg="#111518", fg="#e0e0e0").grid(row=0, column=4, sticky="w", padx=5)
+plane_factor_entry = tk.Entry(opt_frame, width=8, bg="#1b2529", fg="#ffffff", relief="flat", insertbackground="#ffffff")
+plane_factor_entry.insert(0, "100")
+plane_factor_entry.grid(row=0, column=5, padx=5)
+
+# Button
+tk.Button(
+    root,
+    text="Calculate & Show Charts",
+    command=calculate_emissions,
+    bg="#50e3c2",
+    fg="#0a0e10",
+    font=("Arial Rounded MT Bold", 14),
+    relief="flat",
+    padx=20,
+    pady=10,
+    activebackground="#2ed1a7"
+).pack(pady=25)
+
+root.mainloop()
